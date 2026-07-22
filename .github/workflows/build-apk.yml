@@ -5,11 +5,20 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read app version from twa-manifest.json
+        id: version
+        run: |
+          CODE=$(grep -o '"appVersionCode": *[0-9]*' twa-manifest.json | grep -o '[0-9]*')
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v4
         with:
@@ -42,7 +51,18 @@ jobs:
             --out app-release-signed.apk \
             app-release-unsigned-aligned.apk
 
+      - name: Rename APK with version
+        run: mv app-release-signed.apk "minhas-despesas-v${{ steps.version.outputs.code }}.apk"
+
       - uses: actions/upload-artifact@v4
         with:
           name: minhas-despesas-apk
-          path: app-release-signed.apk
+          path: minhas-despesas-v${{ steps.version.outputs.code }}.apk
+
+      - name: Publish GitHub Release (public download)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.code }}
+          name: Versão ${{ steps.version.outputs.code }}
+          files: minhas-despesas-v${{ steps.version.outputs.code }}.apk
+          generate_release_notes: true
