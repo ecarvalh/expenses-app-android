@@ -1,0 +1,48 @@
+name: Build signed APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install build-tools 34
+        run: sdkmanager "build-tools;34.0.0" "platforms;android-34"
+
+      - name: Decode signing keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
+
+      - name: Build unsigned release APK
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Align and sign APK
+        env:
+          BUILD_TOOLS: ${{ env.ANDROID_HOME }}/build-tools/34.0.0
+        run: |
+          "$BUILD_TOOLS/zipalign" -v -f -p 4 \
+            app/build/outputs/apk/release/app-release-unsigned.apk \
+            app-release-unsigned-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks android.keystore \
+            --ks-key-alias android \
+            --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            --key-pass "pass:${{ secrets.ANDROID_KEY_PASSWORD }}" \
+            --out app-release-signed.apk \
+            app-release-unsigned-aligned.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: minhas-despesas-apk
+          path: app-release-signed.apk
